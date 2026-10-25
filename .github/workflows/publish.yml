@@ -9,9 +9,9 @@ on:
         description: Ready-to-publish version from package.json
         required: true
         type: choice
-        default: '1.0.3'
+        default: '1.0.4'
         options:
-          - '1.0.3'
+          - '1.0.4'
       # END version from package.json
 
 permissions:
