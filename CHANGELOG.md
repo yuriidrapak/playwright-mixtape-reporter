@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a manual Actions publish form for a version already merged to `main`, with
+  protected tag creation and the existing full CI and exact-tarball checks.
 - Validate effective npm policy settings, rejecting unsafe overrides without
   exposing configuration values.
 - Add diagnostic output omission, per-line redaction with bounded buffering and
