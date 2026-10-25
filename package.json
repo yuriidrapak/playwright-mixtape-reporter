@@ -1,6 +1,6 @@
 {
   "name": "playwright-mixtape-reporter",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "A zero-runtime-dependency Playwright terminal reporter with a live cassette deck, parallel workers, and failure diagnostics.",
   "type": "module",
   "license": "MIT",

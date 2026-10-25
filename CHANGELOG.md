@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 — 2026-10-25
 
 - Add a manual Actions publish form for a version already merged to `main`, with
   protected tag creation and the existing full CI and exact-tarball checks.

@@ -20,7 +20,7 @@ dependency behavior. User instructions define the authorized scope.
   Browser/metrics integration changes also require `npm run test:browser` after
   `npx --no-install playwright install chromium`.
 - Pack with `npm run pack`, then test **that file** using
-  `npm run test:package -- ./playwright-mixtape-reporter-1.0.1.tgz` (use the current
+  `npm run test:package -- ./playwright-mixtape-reporter-1.0.3.tgz` (use the current
   version). Bare `npm pack` does not build or inspect when scripts are disabled.
 - Preserve user changes. Do not hide failed checks, weaken assertions, or mark
   unexecuted CI platforms as verified. Explain material limitations and failures.
