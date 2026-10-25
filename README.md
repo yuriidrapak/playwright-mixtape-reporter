@@ -184,4 +184,7 @@ and the [development guide](https://github.com/yuriidrapak/playwright-mixtape-re
 Maintainers can follow the [npm release guide](https://github.com/yuriidrapak/playwright-mixtape-reporter/blob/main/docs/releasing.md).
 Publication starts manually from **Actions → Publish npm package → Run workflow**
 by selecting the prepared version from the dropdown, sourced from `package.json`.
+After the one-time tag-credential setup, the workflow checks that the version is
+newer than npm's stable releases, creates its protected tag, runs CI, and publishes
+the tested package with provenance. The form does not bump the version.
 The initial release is tracked in [CHANGELOG.md](CHANGELOG.md).

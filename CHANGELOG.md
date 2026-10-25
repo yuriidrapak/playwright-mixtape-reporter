@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Check the committed package version against all stable versions on npm before
+  creating a release tag, and recheck before upload while preserving identical
+  artifact retries.
 - Generate the manual publish dropdown from `package.json`, preselect the
   prepared version, and reject stale workflow options during CI.
 

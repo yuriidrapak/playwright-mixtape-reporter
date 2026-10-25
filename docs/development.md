@@ -34,6 +34,10 @@ After a package version bump, run `npm run release:sync` to regenerate the
 publish form's dropdown from `package.json`. Commit the updated workflow with
 both package files. `npm run check` includes a read-only `release:check` to catch
 a stale dropdown before merging; see [releasing](releasing.md).
+Release requests also check the version against npm before creating a tag. Run
+`node scripts/check-npm-version.mjs` for the same read-only registry check locally;
+it intentionally fails when the current version is already published. Ordinary
+`npm run check` uses mocked registry responses and does not require a new version.
 
 ## Source layout
 

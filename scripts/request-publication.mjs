@@ -3,6 +3,7 @@ import { appendFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateRelease } from './check-release.mjs';
+import { checkNpmVersion } from './check-npm-version.mjs';
 
 // Run only on reviewed main, without installing or executing project dependencies.
 // The short-lived workflow token dispatches; the maintainer token only creates tags.
@@ -19,6 +20,9 @@ export async function requestPublication({
     assert.equal(lock.packages[''].version, metadata.version);
     assert.match(env.GITHUB_SHA, /^[a-f0-9]{40}$/);
     assert.ok(env.GH_TOKEN, 'Missing workflow token');
+    // Read public npm metadata without GitHub credentials before creating a tag
+    // or dispatching any workflow. package.json remains the version source.
+    await checkNpmVersion(metadata, { fetcher });
     const api = async (method, path, body, token = env.GH_TOKEN) => {
         const response = await fetcher(
             `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/${path}`,
@@ -101,7 +105,7 @@ if (
         event,
         env: process.env,
     });
-    const message = `Requested publication of ${tag}. Follow the tag run in [Publish npm package](https://github.com/${process.env.GITHUB_REPOSITORY}/actions/workflows/publish.yml). This request is not a completed npm publication.\n`;
+    const message = `Verified the package.json version is newer than npm's published stable versions and requested publication of ${tag}. Follow the tag run in [Publish npm package](https://github.com/${process.env.GITHUB_REPOSITORY}/actions/workflows/publish.yml). This request is not a completed npm publication.\n`;
     console.log(
         `Requested publication of ${tag}; follow the separate tag run.`,
     );

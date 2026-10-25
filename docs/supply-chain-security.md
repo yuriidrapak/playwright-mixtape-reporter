@@ -45,6 +45,12 @@ excludes `.map` files, inline maps, `sourcesContent`, source URLs, agent state,
 environment files and test artifacts. Review the exact inventory when adding a
 module; never widen it simply to accept unexpected build output.
 
+Manual release requests read public npm metadata without sending GitHub or npm
+credentials. They require the committed version to exceed every published stable
+version before tag creation, and the build repeats this check before a new upload.
+Registry lookup failures stop publication. This ordering check prevents accidental
+older releases; the exact-artifact integrity check still controls safe retries.
+
 ## Updates and toolchain policy
 
 Use Node 22.23.4+, 24.22.1+, or 26.12.1+ on their respective release lines. These

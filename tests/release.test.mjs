@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { validateRelease } from '../scripts/check-release.mjs';
 import { requestPublication } from '../scripts/request-publication.mjs';
+import { checkNpmVersion } from '../scripts/check-npm-version.mjs';
+import { checkPublished } from '../scripts/check-published.mjs';
 import {
     syncReleaseChoice,
     updateReleaseChoice,
@@ -129,7 +131,20 @@ function fixture() {
     };
 }
 
-function fakeGitHub(responses) {
+function npmVersions(versions = ['1.0.1'], latest = versions.at(-1)) {
+    return [
+        200,
+        {
+            name: 'playwright-mixtape-reporter',
+            versions: Object.fromEntries(
+                versions.map((version) => [version, {}]),
+            ),
+            'dist-tags': { latest },
+        },
+    ];
+}
+
+function fakeApi(responses) {
     const calls = [];
     const fetcher = async (url, options) => {
         calls.push({
@@ -229,7 +244,7 @@ test('main request rejects unmerged versions and unauthorized reruns before any 
     ]) {
         const input = fixture();
         change(input);
-        const mock = fakeGitHub([]);
+        const mock = fakeApi([]);
         await assert.rejects(
             requestPublication({ ...input, fetcher: mock.fetcher }),
         );
@@ -239,33 +254,38 @@ test('main request rejects unmerged versions and unauthorized reruns before any 
 
 test('creates a tag at the requested main commit and dispatches the same version on that tag', async () => {
     const input = fixture();
-    const mock = fakeGitHub([[404], [201, {}], [204]]);
+    const mock = fakeApi([npmVersions(), [404], [201, {}], [204]]);
     assert.equal(
         await requestPublication({ ...input, fetcher: mock.fetcher }),
         'v1.0.2',
     );
     assert.deepEqual(
         mock.calls.map((call) => call.method),
-        ['GET', 'POST', 'POST'],
+        ['GET', 'GET', 'POST', 'POST'],
     );
-    assert.deepEqual(mock.calls[1].body, {
+    assert.equal(
+        mock.calls[0].url,
+        'https://registry.npmjs.org/playwright-mixtape-reporter',
+    );
+    assert.equal(mock.calls[0].headers.Authorization, undefined);
+    assert.deepEqual(mock.calls[2].body, {
         ref: 'refs/tags/v1.0.2',
         sha: input.env.GITHUB_SHA,
     });
     assert.equal(
-        mock.calls[1].headers.Authorization,
+        mock.calls[2].headers.Authorization,
         `Bearer ${input.env.RELEASE_GITHUB_TOKEN}`,
     );
     assert.equal(
-        mock.calls[2].url,
+        mock.calls[3].url,
         'https://api.github.com/repos/yuriidrapak/playwright-mixtape-reporter/actions/workflows/publish.yml/dispatches',
     );
-    assert.deepEqual(mock.calls[2].body, {
+    assert.deepEqual(mock.calls[3].body, {
         ref: 'v1.0.2',
         inputs: { version: '1.0.2' },
     });
     assert.equal(
-        mock.calls[2].headers.Authorization,
+        mock.calls[3].headers.Authorization,
         `Bearer ${input.env.GH_TOKEN}`,
     );
     assert.ok(mock.calls.every((call) => call.redirect === 'error'));
@@ -283,10 +303,10 @@ test('retries reuse the exact existing tag without tag credentials or mutation',
                   [204],
               ]
             : [[200, { object: target }], [204]];
-        const mock = fakeGitHub(responses);
+        const mock = fakeApi([npmVersions(), ...responses]);
         await requestPublication({ ...input, fetcher: mock.fetcher });
         assert.equal(
-            mock.calls.filter((call) => call.method !== 'GET').length,
+            mock.calls.filter((call) => call.method === 'POST').length,
             1,
         );
         assert.match(mock.calls.at(-1).url, /\/dispatches$/);
@@ -317,7 +337,7 @@ test('conflicting tags, missing credentials and API failures never dispatch or m
     for (const scenario of scenarios) {
         const input = fixture();
         if (scenario.noToken) delete input.env.RELEASE_GITHUB_TOKEN;
-        const mock = fakeGitHub(scenario.responses);
+        const mock = fakeApi([npmVersions(), ...scenario.responses]);
         await assert.rejects(
             requestPublication({ ...input, fetcher: mock.fetcher }),
             (error) => {
@@ -338,7 +358,8 @@ test('conflicting tags, missing credentials and API failures never dispatch or m
 
 test('a failed dispatch is reported instead of claiming publication succeeded', async () => {
     const input = fixture();
-    const mock = fakeGitHub([
+    const mock = fakeApi([
+        npmVersions(),
         [200, { object: { type: 'commit', sha: input.env.GITHUB_SHA } }],
         [422],
     ]);
@@ -346,4 +367,123 @@ test('a failed dispatch is reported instead of claiming publication succeeded', 
         requestPublication({ ...input, fetcher: mock.fetcher }),
         /HTTP 422/,
     );
+});
+
+test('npm version ordering is numeric and considers all stable versions, not just latest', async () => {
+    for (const [candidate, published, newest] of [
+        ['1.0.10', ['1.0.9', '0.0.0-stage'], '1.0.9'],
+        ['2.0.0', ['1.99.99', '2.0.0-beta.1'], '1.99.99'],
+        ['1.0.2', ['1.0.1+build.2'], '1.0.1+build.2'],
+        ['1.0.0', ['0.0.0-stage'], undefined],
+        [
+            '9007199254740993.0.0',
+            ['9007199254740992.0.0'],
+            '9007199254740992.0.0',
+        ],
+    ]) {
+        const mock = fakeApi([npmVersions(published)]);
+        assert.equal(
+            await checkNpmVersion(
+                { ...fixture().metadata, version: candidate },
+                { fetcher: mock.fetcher },
+            ),
+            newest,
+        );
+        assert.equal(mock.calls.length, 1);
+        assert.equal(mock.calls[0].headers.Authorization, undefined);
+        assert.equal(mock.calls[0].redirect, 'error');
+        assert.ok(mock.calls[0].signal instanceof AbortSignal);
+    }
+    for (const versions of [
+        ['1.0.2'],
+        ['1.0.3'],
+        ['1.0.10', '1.0.1'],
+        ['1.0.2+build'],
+    ]) {
+        const mock = fakeApi([npmVersions(versions, '1.0.1')]);
+        await assert.rejects(
+            requestPublication({ ...fixture(), fetcher: mock.fetcher }),
+            /must be higher than npm's newest stable version/,
+        );
+        assert.equal(
+            mock.calls.length,
+            1,
+            'No GitHub API calls before version approval',
+        );
+    }
+});
+
+test('npm lookup failures and malformed metadata prevent tags and dispatches', async () => {
+    for (const response of [
+        [404, { error: 'synthetic-private-response' }],
+        [503, { error: 'synthetic-private-response' }],
+        [200, { name: 'another-package', versions: { '1.0.1': {} } }],
+        [200, { name: fixture().metadata.name }],
+        [200, { name: fixture().metadata.name, versions: [] }],
+        [200, { name: fixture().metadata.name, versions: {} }],
+        npmVersions(['invalid-version']),
+        npmVersions(['1.0.1\n']),
+    ]) {
+        const mock = fakeApi([response]);
+        await assert.rejects(
+            requestPublication({ ...fixture(), fetcher: mock.fetcher }),
+            (error) => {
+                assert.doesNotMatch(error.message, /synthetic-/);
+                return true;
+            },
+        );
+        assert.equal(mock.calls.length, 1);
+    }
+    await assert.rejects(
+        requestPublication({
+            ...fixture(),
+            fetcher: async () => {
+                throw new Error('Registry unavailable');
+            },
+        }),
+        /Registry unavailable/,
+    );
+});
+
+test('the upload gate rechecks version ordering and preserves identical-artifact retries', async () => {
+    const { metadata } = fixture();
+    const integrity = 'sha512-synthetic-integrity';
+    const available = fakeApi([[404], npmVersions()]);
+    assert.equal(
+        await checkPublished(metadata, integrity, {
+            fetcher: available.fetcher,
+        }),
+        true,
+    );
+    assert.ok(
+        available.calls.every(
+            (call) => call.headers.Authorization === undefined,
+        ),
+    );
+
+    const newerRelease = fakeApi([[404], npmVersions(['1.0.3'])]);
+    await assert.rejects(
+        checkPublished(metadata, integrity, { fetcher: newerRelease.fetcher }),
+        /must be higher/,
+    );
+    const identical = fakeApi([[200, { ...metadata, dist: { integrity } }]]);
+    assert.equal(
+        await checkPublished(metadata, integrity, {
+            fetcher: identical.fetcher,
+        }),
+        false,
+    );
+    assert.equal(identical.calls.length, 1);
+    for (const response of [
+        [200, { ...metadata, dist: { integrity: 'different' } }],
+        [200, { ...metadata, name: 'another-package', dist: { integrity } }],
+        [200, { ...metadata, version: '1.0.1', dist: { integrity } }],
+        [503, { error: 'unavailable' }],
+    ]) {
+        const mock = fakeApi([response]);
+        await assert.rejects(
+            checkPublished(metadata, integrity, { fetcher: mock.fetcher }),
+        );
+        assert.equal(mock.calls.length, 1);
+    }
 });
