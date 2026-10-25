@@ -1,6 +1,6 @@
 # Publishing to npm
 
-The package name is `playwright-mixtape-reporter`; the initial version is `1.0.0`.
+The package name is `playwright-mixtape-reporter`; the first npm publication candidate is `1.0.1`.
 Build and test the exact tarball before publication. Building/packing does not
 publish anything. Never commit registry tokens or give them to build tools.
 
@@ -38,7 +38,7 @@ npx --no-install playwright install chromium
 npm run test:browser
 npm audit --audit-level=high
 npm run pack
-npm run test:package -- ./playwright-mixtape-reporter-1.0.0.tgz
+npm run test:package -- ./playwright-mixtape-reporter-1.0.1.tgz
 ```
 
 Use the current version in the filename. `npm run pack` cleans/builds, inspects
@@ -77,9 +77,9 @@ GitHub provenance without putting an npm token in CI.
    the bootstrap stage.** This is a registry change, not a dry run.
 
 4. Configure the trusted publisher below, with direct publishing allowed.
-5. Create the real `v1.0.0` GitHub release at the reviewed commit on `main`.
+5. Create the real `v1.0.1` GitHub release at the reviewed commit on `main`.
    The workflow validates every platform, builds and tests the release tarball,
-   and publishes `1.0.0` with provenance.
+   and publishes `1.0.1` with provenance.
 6. Verify the registry artifact and provenance, then remove the unused bootstrap
    stage with `npm stage reject <stage-id>` and complete npm's 2FA prompt. Reject
    only the temporary stage; do not unpublish a released version.
@@ -137,9 +137,10 @@ revoke unneeded publishing tokens. No `NPM_TOKEN` secret is needed.
    and upload only that tarball with its SHA-256. Validation/build have read-only
    repository permissions and no npm environment/OIDC rights.
 4. Publish job: use the protected `npm` environment, download the artifact, verify
-   filename/tag and SHA-256, then publish with
+   filename/tag and SHA-256, then publish the explicit local path
+   `./release/<filename>` with
    `--ignore-scripts --access public --provenance`. This job does not check out
-   source, install project dependencies, build, or execute the package. No shared
+   source, install project dependencies, build, or execute the package. Without the leading `./`, npm can interpret a path as GitHub shorthand. No shared
    dependency cache is restored. Actions are pinned to full commit SHAs.
 5. Verify npm version, provenance link and downloaded tarball integrity. Test
    installation in a separate consumer environment without publishing credentials.

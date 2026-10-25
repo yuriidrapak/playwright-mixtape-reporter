@@ -1,6 +1,6 @@
 # Release readiness review
 
-Reviewed on 2026-10-25 for the initial `playwright-mixtape-reporter@1.0.0` release.
+Reviewed on 2026-10-25 for the `playwright-mixtape-reporter@1.0.1` publication candidate.
 Scope: all reporter source modules, existing tests, npm packaging, documentation,
 dependency advisories, terminal safety, metrics lifecycle, and release automation.
 
@@ -40,8 +40,8 @@ dependency advisories, terminal safety, metrics lifecycle, and release automatio
   declarations, metrics fixture, and Playwright execution with ESM and CommonJS
   config files. The actual archive is parsed against an exact 39-file inventory, compared to
   the build, checked for debug material/common credentials, and size-limited.
-- Final tested tarball: **44,294 bytes**, **39 files**; SHA-256
-  `9551aca6d437bfaaebc35f292bccde1d7187ae0eb793ab2ca0d35d124cb2283c`.
+- Final tested tarball: **44,441 bytes**, **39 files**; SHA-256
+  `f98c506526e7f4458bb919aac4b8a838b56271cce8635e8b5060d36217980f48`.
 - Synthetic ten-worker render/diff benchmark on Node 24.22.1/macOS: median
   **0.684 ms**, p95 **0.902 ms**, approximately **150 changed text bytes/frame**,
   against a 120 ms frame interval. This excludes terminal I/O, metrics polling,
@@ -73,23 +73,35 @@ self-reference declarations before type checking, selecting patched runtimes
 instead of stale runner caches, and fetching peer metadata while enforcing the
 reviewed consumer dependency graph. Windows assertions now use native paths.
 
-## Remaining release gates
+## Publication status
 
-1. Publish the reviewed source with one initial commit using GitHub's no-reply
-   email. Earlier private history and pull requests are excluded from the public
-   repository. Enable private vulnerability reporting and require all seven
-   GitHub CI checks on `main`.
-2. Complete npm's authentication approval for the trusted publisher. The npm
-   owner is authenticated and account 2FA is enabled. Configure the `npm` GitHub
-   environment to restrict deployment to `v*` tags.
-3. Publish the `v1.0.0` GitHub release after the source/identity settings are ready;
-   the workflow reruns the full validation for that exact commit before publishing.
-4. Verify the resulting npm version, digest and provenance; reject the temporary
-   unpublished bootstrap stage. See [releasing](releasing.md).
+The public repository starts from one clean commit using the maintainer's GitHub
+no-reply email. The former private history and pull requests remain private.
+GitHub requires all seven CI checks on `main`, enforces them for administrators,
+and prevents updates/deletion of `v*` release tags. The `npm` environment permits
+only `v*` tags. Private vulnerability reporting, Dependabot alerts/security
+updates, secret scanning, and push protection are enabled.
 
-The npm name has been reserved through staging. The temporary stage is not a
-production release and must never be approved. Until the publication workflow
-succeeds, `1.0.0` is not published.
+The [v1.0.0 release run](https://github.com/yuriidrapak/playwright-mixtape-reporter/actions/runs/40215454332)
+passed all seven validation jobs, the build, exact-artifact consumer checks, and
+tarball transfer verification. Upload failed because npm parsed
+`release/<filename>` as GitHub shorthand. No npm version was published.
+Version `1.0.1` fixes this to `./release/<filename>` while preserving the existing
+tag. Its 39-file tarball passed external-consumer checks and a credential-free
+`npm publish ./release/<filename> --dry-run --ignore-scripts --access public`.
+
+Remaining gates for `1.0.1`:
+
+1. Complete npm's trusted-publisher authentication approval. The npm owner is
+   authenticated and account 2FA is enabled.
+2. Merge the publication-path fix after CI, then publish the `v1.0.1` GitHub
+   release. The workflow reruns validation for that exact commit before upload.
+3. Verify npm version, digest and provenance; disallow token bypass of 2FA and
+   reject the temporary unpublished bootstrap stage. See [releasing](releasing.md).
+
+The exact npm name `playwright-mixtape-reporter` is reserved through staging.
+The temporary stage must never be approved. Registry publication is complete only
+when the workflow succeeds and the registry artifact/provenance are verified.
 
 ## Operational limits
 

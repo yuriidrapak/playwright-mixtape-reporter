@@ -105,4 +105,4 @@ jobs:
         env:
           PACKAGE_FILE: ${{ needs.build.outputs.filename }}
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
-        run: npm publish "release/$PACKAGE_FILE" --ignore-scripts --access public --provenance
+        run: npm publish "./release/$PACKAGE_FILE" --ignore-scripts --access public --provenance

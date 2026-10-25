@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 — 2026-10-25
+
+- Correct the release workflow's local tarball path to `./release/<filename>`.
+  npm interpreted the earlier path as GitHub shorthand, so `1.0.0` passed all
+  validation and artifact checks but was not published to npm. The existing
+  GitHub tag is preserved; this patch is the first npm publication candidate.
+
 ## 1.0.0 — 2026-10-25
 
 - Initial standalone release as `playwright-mixtape-reporter`, under MIT.

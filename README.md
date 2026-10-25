@@ -38,10 +38,10 @@ npm run security
 npm ci --ignore-scripts
 npm run check
 npm run pack
-npm run test:package -- ./playwright-mixtape-reporter-1.0.0.tgz
+npm run test:package -- ./playwright-mixtape-reporter-1.0.1.tgz
 
 # In your Playwright project, use the tarball's actual path:
-npm install --save-dev /path/to/playwright-mixtape-reporter-1.0.0.tgz
+npm install --save-dev /path/to/playwright-mixtape-reporter-1.0.1.tgz
 ```
 
 No build or install hooks run when consumers install the published package.
