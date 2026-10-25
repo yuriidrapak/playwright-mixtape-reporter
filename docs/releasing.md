@@ -1,6 +1,6 @@
 # Publishing to npm
 
-The package name is `playwright-mixtape-reporter`; the first npm publication candidate is `1.0.1`.
+The package name is `playwright-mixtape-reporter`; the first npm release is `1.0.1`.
 Build and test the exact tarball before publication. Building/packing does not
 publish anything. Never commit registry tokens or give them to build tools.
 

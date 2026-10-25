@@ -67,6 +67,9 @@ dependency behavior. User instructions define the authorized scope.
 - Keep publication dependent on the reusable CI workflow for the exact release
   commit. Every supported Node/platform check and Chromium must pass before the
   release artifact is built and published; a separate green run is insufficient.
+- Use explicit local archive paths such as `./release/package.tgz` in npm
+  commands. Validate publication-path changes with a credential-free dry run;
+  npm can interpret a bare `directory/filename` as GitHub shorthand.
 - Transfer only the tested tarball; verify name/version and SHA-256 in the final
   job, then publish it with `--ignore-scripts` and OIDC/provenance. Restrict manual
   token publication on npm; OIDC does not disable alternate publishing paths.
