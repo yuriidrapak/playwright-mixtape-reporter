@@ -1,6 +1,6 @@
 # Release readiness review
 
-Reviewed on 2026-10-25 for the `playwright-mixtape-reporter@1.0.1` publication candidate.
+Reviewed on 2026-10-25 for the published `playwright-mixtape-reporter@1.0.1` release.
 Scope: all reporter source modules, existing tests, npm packaging, documentation,
 dependency advisories, terminal safety, metrics lifecycle, and release automation.
 
@@ -90,18 +90,30 @@ Version `1.0.1` fixes this to `./release/<filename>` while preserving the existi
 tag. Its 39-file tarball passed external-consumer checks and a credential-free
 `npm publish ./release/<filename> --dry-run --ignore-scripts --access public`.
 
-Remaining gates for `1.0.1`:
+The [v1.0.1 release workflow](https://github.com/yuriidrapak/playwright-mixtape-reporter/actions/runs/40216248362)
+succeeded on 2026-10-25 from commit
+`47cc64291f598d02d345d853e7c15fd657863621`. All seven validation jobs, the build,
+consumer checks, artifact transfer, and OIDC publication passed.
 
-1. Complete npm's trusted-publisher authentication approval. The npm owner is
-   authenticated and account 2FA is enabled.
-2. Merge the publication-path fix after CI, then publish the `v1.0.1` GitHub
-   release. The workflow reruns validation for that exact commit before upload.
-3. Verify npm version, digest and provenance; disallow token bypass of 2FA and
-   reject the temporary unpublished bootstrap stage. See [releasing](releasing.md).
+The public registry serves
+[`playwright-mixtape-reporter@1.0.1`](https://www.npmjs.com/package/playwright-mixtape-reporter/v/1.0.1),
+and `latest` resolves to `1.0.1`. The downloaded registry tarball is byte-for-byte
+identical to the tested 44,441-byte artifact and matches the SHA-256 above.
+The registry's SLSA provenance payload matches the artifact's SHA-512, public
+repository, `publish.yml`, `v1.0.1` tag, tested commit, and GitHub run. The signed
+statement is recorded in the
+[Sigstore transparency log](https://search.sigstore.dev/?logIndex=3463903333).
+This identifies the build origin; it is not a code-safety guarantee.
 
-The exact npm name `playwright-mixtape-reporter` is reserved through staging.
-The temporary stage must never be approved. Registry publication is complete only
-when the workflow succeeds and the registry artifact/provenance are verified.
+npm trusted publishing is bound to this repository, `publish.yml`, and environment
+`npm`. Account 2FA is enabled, and package publication requires 2FA without token
+bypass. No npm publishing token is stored in GitHub Actions. The temporary
+unpublished bootstrap stage was rejected after publication; it was never approved.
+
+GitHub's no-reply commits do not hide npm's public maintainer contact email. npm
+includes the account email in version metadata, including this release. Future
+publications can use a verified public contact alias; changing it does not erase
+contact metadata from existing versions. See [release preparation](releasing.md).
 
 ## Operational limits
 
