@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import {
@@ -10,6 +13,7 @@ import {
 import {
     validateDependencies,
     validateRuntime,
+    validateNpmConfig,
 } from '../scripts/check-policy.mjs';
 
 function files() {
@@ -81,6 +85,100 @@ test('validates archive bytes and rejects maps, private files, traversal, duplic
         () => readArchive(gzipSync(Buffer.alloc(1_000_001))),
         /larger than/,
     );
+});
+
+test('effective npm policy rejects environment overrides and duplicate config without leaking values', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mixtape-npm-policy-'));
+    const config =
+        'ignore-scripts=true\nsave-exact=true\nmin-release-age=7\nregistry=https://registry.npmjs.org/\n';
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            ([key]) => !/^npm_config_/i.test(key),
+        ),
+    );
+    env.NPM_CONFIG_USERCONFIG = join(directory, 'user.npmrc');
+    env.NPM_CONFIG_GLOBALCONFIG = join(directory, 'global.npmrc');
+    try {
+        writeFileSync(env.NPM_CONFIG_USERCONFIG, '');
+        writeFileSync(env.NPM_CONFIG_GLOBALCONFIG, '');
+        writeFileSync(join(directory, 'package.json'), '{"private":true}');
+        writeFileSync(join(directory, '.npmrc'), config);
+        validateNpmConfig(directory, env);
+        for (const [key, value] of [
+            ['ignore-scripts', 'false'],
+            ['save-exact', 'false'],
+            ['min-release-age', '0'],
+            ['registry', 'https://fixture-secret@example.invalid/'],
+        ]) {
+            for (const prefix of ['npm_config_', 'NPM_CONFIG_']) {
+                const variable = prefix + key.replaceAll('-', '_');
+                assert.throws(
+                    () =>
+                        validateNpmConfig(directory, {
+                            ...env,
+                            [variable]: value,
+                        }),
+                    (error) => {
+                        assert.match(
+                            error.message,
+                            new RegExp(`Unsafe effective npm setting: ${key}`),
+                        );
+                        assert.doesNotMatch(
+                            error.message,
+                            /fixture-secret|example.invalid/,
+                        );
+                        return true;
+                    },
+                );
+            }
+            writeFileSync(
+                join(directory, '.npmrc'),
+                config + `${key}=${value}\n`,
+            );
+            assert.throws(
+                () => validateNpmConfig(directory, env),
+                /Unsafe effective npm setting/,
+            );
+            writeFileSync(join(directory, '.npmrc'), config);
+        }
+        validateNpmConfig(directory, {
+            ...env,
+            npm_config_min_release_age: '14',
+        });
+        writeFileSync(
+            join(directory, 'check.mjs'),
+            `import { validateNpmConfig, validateNpmScriptEnvironment } from ${JSON.stringify(new URL('../scripts/check-policy.mjs', import.meta.url).href)};
+validateNpmScriptEnvironment(process.env);
+validateNpmConfig(process.cwd());
+`,
+        );
+        writeFileSync(
+            join(directory, 'package.json'),
+            JSON.stringify({
+                private: true,
+                scripts: { check: 'node check.mjs' },
+            }),
+        );
+        const run = (flags) =>
+            spawnSync(
+                process.execPath,
+                [env.npm_execpath, ...flags, 'run', 'check'],
+                {
+                    cwd: directory,
+                    env,
+                    encoding: 'utf8',
+                    timeout: 15000,
+                },
+            );
+        assert.equal(run([]).status, 0);
+        for (const flag of ['--ignore-scripts=false', '--save-exact=false']) {
+            const child = run([flag]);
+            assert.equal(child.status, 1);
+            assert.match(child.stderr, /Unsafe effective npm setting/);
+        }
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
 });
 
 test('rejects embedded debug sources, credentials, and unexpected lifecycle code', () => {

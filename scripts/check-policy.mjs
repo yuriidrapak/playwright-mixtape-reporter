@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -95,6 +96,65 @@ export function validateRuntime(node, npm) {
     );
 }
 
+// Query only these non-secret settings, never npm's full configuration.
+export function validateNpmScriptEnvironment(env) {
+    // npm omits default-valued CLI options from a run-script child's environment.
+    // A fresh config query would then rediscover the safe project value instead.
+    // These mandatory non-default settings must also be present in npm's snapshot.
+    for (const key of ['ignore_scripts', 'save_exact']) {
+        const name = `npm_config_${key}`;
+        const value = Object.hasOwn(env, name)
+            ? env[name]
+            : Object.entries(env).find(
+                  ([candidate]) => candidate.toLowerCase() === name,
+              )?.[1];
+        if (value !== 'true')
+            throw new Error(
+                `Unsafe effective npm setting: ${key.replaceAll('_', '-')}`,
+            );
+    }
+    // min-release-age has envExport:false in npm. Its persisted/environment
+    // value is queried below; install commands must explicitly enforce the age.
+}
+
+export function validateNpmConfig(cwd, env = process.env) {
+    assert.ok(env.npm_execpath, 'Run npm run security to check npm policy');
+    const settings = {
+        'ignore-scripts': 'true',
+        'save-exact': 'true',
+        'min-release-age': '7',
+        registry: 'https://registry.npmjs.org/',
+    };
+    let output;
+    try {
+        output = execFileSync(
+            process.execPath,
+            [env.npm_execpath, 'config', 'get', ...Object.keys(settings)],
+            { cwd, env, encoding: 'utf8', stdio: 'pipe', timeout: 15_000 },
+        );
+    } catch {
+        // npm errors can include configuration values. Do not echo them.
+        throw new Error('Unable to verify effective npm policy');
+    }
+    const effective = new Map(
+        output
+            .trim()
+            .split(/\r?\n/)
+            .map((line) => {
+                const separator = line.indexOf('=');
+                return [line.slice(0, separator), line.slice(separator + 1)];
+            }),
+    );
+    for (const [key, expected] of Object.entries(settings)) {
+        const value = effective.get(key);
+        const valid =
+            key === 'min-release-age'
+                ? /^\d+$/.test(value ?? '') && Number(value) >= 7
+                : value === expected;
+        if (!valid) throw new Error(`Unsafe effective npm setting: ${key}`);
+    }
+}
+
 if (
     process.argv[1] &&
     pathToFileURL(resolve(process.argv[1])).href === import.meta.url
@@ -128,6 +188,8 @@ if (
             config.split(/\r?\n/).includes(setting),
             `Missing npm policy: ${setting}`,
         );
+    validateNpmScriptEnvironment(process.env);
+    validateNpmConfig(new URL('../', import.meta.url));
     console.log(
         `Supply-chain policy passed for ${Object.keys(lock.packages).length - 1} locked dependencies.`,
     );

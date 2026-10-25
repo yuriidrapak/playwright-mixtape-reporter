@@ -165,7 +165,11 @@ byte counters; they do not capture request URLs, headers, or bodies. Diagnostic
 logs include failure messages, captured test output, source paths, and trace
 locations, which can contain secrets or personal data. Review artifacts before
 sharing; `showLogs: false` does **not** disable the file log. Set `outputFile: false`
-to disable it. See [security policy](SECURITY.md).
+to disable it. `includeOutputInDiagnostics: false` omits captured output from the
+file; `redactDiagnosticText` optionally transforms its lines. Issue logs default
+to a configurable 10 MiB cap. These controls do not redact terminal output or
+trace contents. See [diagnostic controls](docs/usage.md#failed-and-flaky-log) and
+the [security policy](SECURITY.md).
 
 Release checks inspect the compressed tarball against an exact file inventory,
 reject debug sources and common credential patterns, and test its public exports

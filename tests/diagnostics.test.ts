@@ -238,3 +238,181 @@ test('resolves log paths beside the config, isolates shards, supports opt-out an
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('can omit captured streams while retaining errors and trace references', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mixtape-private-log-'));
+    try {
+        const result = attempt('failed');
+        result.errors = [{ message: 'retain diagnostic error' }];
+        result.stdout = ['synthetic stdout secret'];
+        result.stderr = [Buffer.from('synthetic stderr secret')];
+        result.attachments = [
+            {
+                name: 'trace',
+                contentType: 'application/zip',
+                path: join(dir, 'trace.zip'),
+            },
+        ];
+        const path = join(dir, 'issues.log');
+        writeIssueLog(
+            path,
+            [item('failure', 'unexpected', [result])],
+            finished,
+            [],
+            { includeOutputInDiagnostics: false },
+        );
+        const log = readFileSync(path, 'utf8');
+        assert.doesNotMatch(log, /synthetic|stdout:|stderr:/);
+        assert.match(log, /retain diagnostic error/);
+        assert.match(log, /trace.zip/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('redacts complete sanitized lines across every output chunk boundary, including errors and labels', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mixtape-redaction-'));
+    const secret = 'synthetic-secret';
+    try {
+        const bytes = Buffer.from(`Привіт ${secret}\n`);
+        const path = join(dir, 'issues.log');
+        for (let split = 0; split <= bytes.length; split++) {
+            const result = attempt('failed');
+            result.errors = [{ message: `error ${secret}` }];
+            result.stdout = [bytes.subarray(0, split), bytes.subarray(split)];
+            result.stderr = [`partial ${secret}`];
+            writeIssueLog(
+                path,
+                [item(secret, 'unexpected', [result])],
+                finished,
+                [{ message: secret }],
+                {
+                    redactDiagnosticText: (line) =>
+                        line.replaceAll(
+                            secret,
+                            '\u001b[31m[REDACTED]\u001b[0m',
+                        ),
+                },
+            );
+            const log = readFileSync(path, 'utf8');
+            assert.doesNotMatch(log, /synthetic-secret|\uFFFD/);
+            assert.equal(log.includes('\u001b'), false);
+            assert.match(log, /Привіт \[REDACTED\]/);
+            assert.match(log, /partial \[REDACTED\]/);
+            assert.match(log, /error \[REDACTED\]/);
+            assert.equal(
+                result.errors[0]!.message,
+                `error ${secret}`,
+                'Other reporters retain their original data',
+            );
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('redaction fails closed on callback failures and oversized lines', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mixtape-redaction-errors-'));
+    try {
+        const path = join(dir, 'issues.log');
+        const result = attempt('failed');
+        result.stdout = [
+            'synthetic-',
+            'secret\n',
+            'x'.repeat(65536),
+            'synthetic-secret\nnext line\n',
+        ];
+        const tests = [item('failure', 'unexpected', [result])];
+        writeIssueLog(path, tests, finished, [], {
+            redactDiagnosticText: (line) => {
+                if (line.includes('synthetic-secret'))
+                    throw new Error('synthetic-secret');
+                return line;
+            },
+        });
+        const log = readFileSync(path, 'utf8');
+        assert.doesNotMatch(log, /synthetic-secret|x{100}/);
+        assert.match(log, /redaction failed; line omitted/);
+        assert.match(log, /exceeds redaction buffer limit/);
+        assert.match(log, /next line/);
+        for (const callback of [
+            () => 1,
+            async () => {
+                throw new Error('synthetic-secret');
+            },
+        ]) {
+            writeIssueLog(path, tests, finished, [], {
+                redactDiagnosticText: callback as unknown as (
+                    text: string,
+                ) => string,
+            });
+            assert.doesNotMatch(readFileSync(path, 'utf8'), /synthetic-secret/);
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('caps UTF-8 issue-log bytes with a visible notice and no partial characters or temporary files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mixtape-log-limit-'));
+    try {
+        const path = join(dir, 'issues.log');
+        const result = attempt('failed');
+        result.stdout = ['🎵'.repeat(10000), 'should never reach the file'];
+        for (const maximum of [1024, 1025, 1026, 1027]) {
+            const info = writeIssueLog(
+                path,
+                [item('failure', 'unexpected', [result])],
+                finished,
+                [],
+                { maxDiagnosticBytes: maximum },
+            );
+            const bytes = readFileSync(path);
+            assert.equal(info.truncated, true);
+            assert.ok(bytes.length <= maximum);
+            const log = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+            assert.match(log, /Diagnostics truncated at configured byte limit/);
+            assert.doesNotMatch(log, /should never reach|\uFFFD/);
+            assert.deepEqual(readdirSync(dir), ['issues.log']);
+            if (process.platform !== 'win32')
+                assert.equal(statSync(path).mode & 0o777, 0o600);
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('reporter passes diagnostic privacy controls through without modifying captured results', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mixtape-reporter-privacy-'));
+    const stdout = mock.method(process.stdout, 'write', () => true);
+    try {
+        const path = join(dir, 'issues.log');
+        const result = attempt('failed');
+        result.stdout = ['synthetic captured secret'];
+        result.errors = [{ message: 'synthetic error secret' }];
+        const selected = item('failure', 'unexpected', [result]);
+        const reporter = new MixtapeReporter({
+            colorMode: 'bw',
+            printFailureDetails: false,
+            outputFile: path,
+            includeOutputInDiagnostics: false,
+            maxDiagnosticBytes: 1024,
+            redactDiagnosticText: (line) =>
+                line.replaceAll('synthetic error secret', '[REDACTED]'),
+        });
+        reporter.onBegin(
+            { rootDir: dir, workers: 1 } as FullConfig,
+            { allTests: () => [selected] } as unknown as Suite,
+        );
+        reporter.onEnd(finished);
+        const log = readFileSync(path, 'utf8');
+        assert.doesNotMatch(log, /synthetic/);
+        assert.match(log, /\[REDACTED\]/);
+        assert.ok(statSync(path).size <= 1024);
+        assert.equal(result.stdout[0], 'synthetic captured secret');
+        assert.equal(result.errors[0]!.message, 'synthetic error secret');
+    } finally {
+        stdout.mock.restore();
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

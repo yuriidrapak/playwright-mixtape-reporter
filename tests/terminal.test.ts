@@ -472,3 +472,54 @@ test('uses a compact startup heading and clips animation to the available termin
         restoreEnv();
     }
 });
+
+test('isolates forwarded styles from reporter writes and the other stream while preserving chunked colors', () => {
+    const output: string[] = [];
+    const errors: string[] = [];
+    const stdout = mock.method(
+        process.stdout,
+        'write',
+        (value: string | Uint8Array) => {
+            output.push(value.toString());
+            return true;
+        },
+    );
+    const stderr = mock.method(
+        process.stderr,
+        'write',
+        (value: string | Uint8Array) => {
+            errors.push(value.toString());
+            return true;
+        },
+    );
+    const terminal = new Terminal(
+        resolveOptions({
+            colorMode: 'color',
+            showLogs: true,
+            animations: false,
+        }),
+    );
+    try {
+        terminal.forward('\u001b[31', process.stdout);
+        assert.deepEqual(output, []);
+        terminal.forward('mred', process.stdout);
+        assert.equal(output.at(-1), '\u001b[0m\u001b[31mred\u001b[0m');
+        terminal.write('reporter result\n');
+        terminal.forward('plain stderr\n', process.stderr);
+        assert.equal(errors.at(-1), '\u001b[0mplain stderr\u001b[0m\n');
+        terminal.forward(' still red\u001b[0m\n', process.stdout);
+        assert.equal(
+            output.at(-1),
+            '\u001b[0m\u001b[31m still red\u001b[0m\u001b[0m\n',
+        );
+        terminal.forward('\u001b[8mvisible\n', process.stdout);
+        assert.equal(output.at(-1), '\u001b[0mvisible\u001b[0m\n');
+        terminal.stop();
+        terminal.forward('next run\n', process.stdout);
+        assert.equal(output.at(-1), '\u001b[0mnext run\u001b[0m\n');
+    } finally {
+        terminal.stop();
+        stdout.mock.restore();
+        stderr.mock.restore();
+    }
+});

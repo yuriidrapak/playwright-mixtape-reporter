@@ -26,11 +26,18 @@ available. Response times are best effort; this project has no security SLA.
   and trace locations. These may contain secrets. No automatic redaction is
   promised. `showLogs: false` hides terminal logs; `outputFile: false` disables
   the reporter's diagnostic file.
+- `includeOutputInDiagnostics: false` omits captured stdout/stderr from the file.
+  `redactDiagnosticText` transforms complete sanitized log lines, including errors
+  and paths. Callback failures and lines over its 64 KiB buffer are omitted.
+  It does not redact terminal output, other reporters, or traces. The default
+  `maxDiagnosticBytes` cap is 10 MiB, with visible truncation; trace files are
+  outside this cap. These controls do not guarantee that artifacts are safe to share.
 - Generated issue logs and extracted traces use mode `0600` on POSIX. Metrics
   use a private temporary directory. Windows relies on directory ACLs. Existing
   attachments are referenced without changing their permissions.
 - Test output is filtered before forwarding: terminal commands and bidi controls
-  are removed; optional SGR colors remain. This is display hardening, not a
+  are removed; only allowlisted SGR colors/basic styles remain, with resets between
+  forwarded writes. Concealment and blinking are rejected. This is display hardening, not a
   sandbox for untrusted tests. Playwright tests already execute as your OS user.
 - Output destinations are trusted configuration. Use separate locations for
   concurrent runs. Logs are replaced atomically; artifacts referenced from
@@ -49,6 +56,11 @@ pins the registry, saves exact versions and filters releases younger than seven
 days. The lockfile policy checks dependency identities, SHA-512 integrity and
 absence of install hooks. Verified urgent security updates may need a documented,
 narrow age exception; do not postpone a critical fix for a cooldown.
+The policy also queries only npm's four non-secret effective settings, rejecting
+unsafe inherited environment settings and duplicate-key overrides. It never dumps
+the full npm configuration or includes rejected values in errors.
+CI also passes the seven-day minimum directly to installation commands, because
+npm does not export release-age CLI flags to lifecycle scripts.
 
 `npm run pack` builds explicitly and inspects actual archive bytes against a
 reviewed file inventory. It rejects extra files, links, debug source material and

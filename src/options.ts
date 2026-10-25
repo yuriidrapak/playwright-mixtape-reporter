@@ -21,6 +21,12 @@ export interface MixtapeReporterOptions {
     printFailureDetails?: boolean;
     /** Failed/flaky log relative to the config directory. Default: test-results/mixtape-reporter/issues.log; false disables it. */
     outputFile?: string | false;
+    /** Include captured stdout/stderr in the issue log. Default: true; independent of showLogs. */
+    includeOutputInDiagnostics?: boolean;
+    /** Transform each plain-text issue-log line before writing. Does not redact terminal output or trace contents. */
+    redactDiagnosticText?: (text: string) => string;
+    /** Maximum issue-log UTF-8 bytes, including a truncation notice; at least 1024. Default: 10 MiB. Excludes traces. */
+    maxDiagnosticBytes?: number;
     /** Compatibility alias for forcing ANSI color on/off; prefer colorMode. */
     colors?: boolean;
     /** Compatibility alias for showLogs. */
@@ -40,6 +46,9 @@ export interface ResolvedOptions {
     includeSuiteTitles: boolean;
     printFailureDetails: boolean;
     outputFile: string | false;
+    includeOutputInDiagnostics: boolean;
+    redactDiagnosticText?: (text: string) => string;
+    maxDiagnosticBytes: number;
 }
 
 function choice<T extends string>(
@@ -73,12 +82,26 @@ export function resolveOptions(
         'printFailureDetails',
         'colors',
         'printOutput',
+        'includeOutputInDiagnostics',
     ] as const) {
         if (options[key] !== undefined && typeof options[key] !== 'boolean')
             throw new TypeError(`${key} must be a boolean`);
     }
     if (options.title !== undefined && typeof options.title !== 'string')
         throw new TypeError('title must be a string');
+    if (
+        options.redactDiagnosticText !== undefined &&
+        typeof options.redactDiagnosticText !== 'function'
+    )
+        throw new TypeError('redactDiagnosticText must be a function');
+    if (
+        options.maxDiagnosticBytes !== undefined &&
+        (!Number.isSafeInteger(options.maxDiagnosticBytes) ||
+            options.maxDiagnosticBytes < 1024)
+    )
+        throw new TypeError(
+            'maxDiagnosticBytes must be a safe integer of at least 1024',
+        );
     if (
         options.outputFile !== undefined &&
         options.outputFile !== false &&
@@ -152,5 +175,10 @@ export function resolveOptions(
         printFailureDetails: options.printFailureDetails ?? true,
         outputFile:
             options.outputFile ?? 'test-results/mixtape-reporter/issues.log',
+        includeOutputInDiagnostics: options.includeOutputInDiagnostics ?? true,
+        ...(options.redactDiagnosticText
+            ? { redactDiagnosticText: options.redactDiagnosticText }
+            : {}),
+        maxDiagnosticBytes: options.maxDiagnosticBytes ?? 10 * 1024 * 1024,
     };
 }

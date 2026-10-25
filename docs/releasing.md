@@ -12,6 +12,14 @@ publish anything. Never commit registry tokens or give them to build tools.
 - Push reviewed source, lockfile and workflows. Require the full CI matrix on
   `main` and protect release tags. Enable required code-owner review when another
   maintainer can review changes; CODEOWNERS alone is advisory.
+- Use two separate active tag rulesets targeting `v*`: one restricts creation
+  with only the release maintainer (`yuriidrapak`) allowed to bypass it; the other
+  restricts updates/deletions with **no bypass actors**. Do not add the maintainer
+  to the immutable-tag rule. A tag's workflow can be changed on its commit, so a
+  main-ancestry check inside that workflow is not an independent authorization
+  boundary. This separation keeps automatic publishing after tests while
+  preventing other repository writers from creating release tags. Review the
+  creation allowlist deliberately when adding a release maintainer or automation.
 - Use GitHub's no-reply email for public commits. Do not merge private prototype
   history into the public repository. Squashing a branch does not remove GitHub
   pull-request references or cached commits.

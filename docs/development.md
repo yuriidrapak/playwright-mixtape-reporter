@@ -15,11 +15,20 @@ npm run demo -- --workers=10
 
 Dependencies are pinned in `package.json` and `package-lock.json`. `.npmrc` blocks
 install scripts and filters new releases for seven days. `npm run security` checks
-the lockfile and toolchain before installing. Explicit npm commands such as
+the lockfile, toolchain, and effective npm script/registry/exact-save/release-age
+settings before installing. Environment or duplicate-key overrides cannot silently
+weaken those checks. Only these non-secret values are queried; full npm config
+is never dumped. Explicit npm commands such as
 `npm test` still execute their named scripts. Build with `npm run build`; it removes
 stale output before emitting native ESM and declarations. Published consumers
 need no compiler. Development tests use Node's built-in TypeScript stripping;
 keep TypeScript syntax erasable (no enums or parameter properties).
+
+Run `npm run security` without npm CLI overrides. npm does not propagate
+`--min-release-age` CLI flags to scripts, so the check validates the persisted
+and inherited configuration, not a hidden flag on the parent command. CI uses
+`npm ci --ignore-scripts --min-release-age=7` explicitly. A successful check
+cannot prevent someone overriding policy in a separate later install command.
 
 ## Source layout
 

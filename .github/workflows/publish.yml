@@ -45,7 +45,7 @@ jobs:
           node scripts/check-release.mjs
           npm run security
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --min-release-age=7
       - name: Pack and inspect the release artifact
         id: pack
         run: npm run pack

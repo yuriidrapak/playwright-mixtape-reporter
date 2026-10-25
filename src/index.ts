@@ -192,6 +192,7 @@ export default class MixtapeReporter implements Reporter {
                     this.tests,
                     result,
                     this.globalErrors,
+                    this.options,
                 );
             } catch (error) {
                 logError = singleLine(

@@ -56,6 +56,9 @@ export function renderSummary(
             (data.log
                 ? `${terminal.fileLink(logLabel, data.log.path)}: ${logPath}\n${traceLabel}\n`
                 : '') +
+            (data.log?.truncated
+                ? 'Issue log truncated at configured byte limit.\n'
+                : '') +
             (data.logError ? `Issue log unavailable: ${data.logError}\n` : '') +
             terminal.rule() +
             '\n'
@@ -126,6 +129,8 @@ export function renderSummary(
         if (data.log) {
             row(logLabel);
             row(traceLabel);
+            if (data.log.truncated)
+                row('Issue log truncated at configured byte limit.');
             row(
                 `Open ${fitPath(basename(logPath), Math.max(1, inner - 5), mono)}`,
                 data.log.path,
