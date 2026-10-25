@@ -57,6 +57,12 @@ test('validates JavaScript options before reporter startup', () => {
         { title: 123 },
         { outputFile: '' },
         { outputFile: '\0' },
+        { includeOutputInDiagnostics: 'false' },
+        { redactDiagnosticText: true },
+        { maxDiagnosticBytes: 0 },
+        { maxDiagnosticBytes: 1023 },
+        { maxDiagnosticBytes: 1024.5 },
+        { maxDiagnosticBytes: Infinity },
     ])
         assert.throws(() =>
             resolveOptions(invalid as unknown as MixtapeReporterOptions),
@@ -65,4 +71,56 @@ test('validates JavaScript options before reporter startup', () => {
         resolveOptions({ outputFile: false, symbols: 'ascii' }).outputFile,
         false,
     );
+});
+
+test('allows bounded colors and basic styles but rejects concealment, blink and malformed extended colors', () => {
+    for (const sequence of [
+        '8',
+        '5',
+        '6',
+        '7',
+        '28',
+        '31;8',
+        '1:8',
+        '38;2;256;0;0',
+        '38;5',
+        '38:2:1:2',
+        '48:2:1:0:0:0',
+        '999',
+    ]) {
+        const input = `\u001b[${sequence}mvisible`;
+        for (let split = 0; split <= input.length; split++) {
+            const filter = new OutputSanitizer(true);
+            assert.equal(
+                filter.write(input.slice(0, split)) +
+                    filter.write(input.slice(split)),
+                'visible',
+            );
+            assert.equal(filter.style, '');
+        }
+    }
+    for (const sequence of [
+        '1;3;4;31',
+        '38;5;8',
+        '48;2;8;5;7',
+        '38:2::8:5:7',
+        '48:2:0:8:5:7',
+        '38:5:255',
+        '90;107',
+    ]) {
+        const filter = new OutputSanitizer(true);
+        assert.equal(
+            filter.write(`\u001b[${sequence}mcolor`),
+            `\u001b[${sequence}mcolor`,
+        );
+        assert.ok(filter.style.length < 100);
+        filter.write('\u001b[0m');
+        assert.equal(filter.style, '');
+    }
+    const filter = new OutputSanitizer(true);
+    for (let i = 0; i < 1000; i++)
+        filter.write('\u001b[1;2;3;4;38;5;100;48;2;1;2;3m');
+    assert.ok(filter.style.length < 100);
+    filter.write('\u001b[22;23;24;39;49m');
+    assert.equal(filter.style, '');
 });

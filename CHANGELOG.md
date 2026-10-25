@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Validate effective npm policy settings, rejecting unsafe overrides without
+  exposing configuration values.
+- Add diagnostic output omission, per-line redaction with bounded buffering and
+  fail-closed callback handling, and a configurable 10 MiB issue-log limit.
+- Restrict forwarded SGR to supported colors/basic styles and isolate styles
+  across output writes while retaining each stream's chunked color state.
+- Document separate release-tag creation restrictions and immutable-tag rules.
+
 ## 1.0.1 — 2026-10-25
 
 - Correct the release workflow's local tarball path to `./release/<filename>`.

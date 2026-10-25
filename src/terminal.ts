@@ -219,8 +219,14 @@ export class Terminal {
             filter = new OutputSanitizer(this.options.colors);
             this.outputFilters.set(stream, filter);
         }
-        const value = filter.write(chunk);
-        if (!value) return;
+        const style = filter.style;
+        const filtered = filter.write(chunk);
+        if (!filtered) return;
+        // Isolate each stream write from reporter output and other streams, while
+        // retaining a bounded style snapshot for the next chunk of this stream.
+        const value = this.options.colors
+            ? `\u001b[0m${style}${filtered.endsWith('\n') ? filtered.slice(0, -1) + '\u001b[0m\n' : filtered + '\u001b[0m'}`
+            : filtered;
         if (
             stream === process.stdout &&
             this.atLineStart &&

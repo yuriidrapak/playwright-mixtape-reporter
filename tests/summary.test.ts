@@ -169,3 +169,18 @@ test('keeps every frame edge aligned with fixed-cell badges and an intact log fi
         assert.ok(path.includes('…'));
     }
 });
+
+test('makes diagnostic truncation visible in both summary themes', () => {
+    for (const theme of ['cassette', 'compact'] as const) {
+        const options = resolveOptions({ theme, colorMode: 'bw' });
+        const terminal = new Terminal(options);
+        const output = renderSummary(
+            { ...data, log: { ...data.log!, truncated: true } },
+            options,
+            terminal,
+            120,
+        );
+        assert.match(output, /Issue log truncated at configured byte limit/);
+        assert.match(output, /issues.log/);
+    }
+});

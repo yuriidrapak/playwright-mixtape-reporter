@@ -59,6 +59,11 @@ repository policy, not a configuration imposed on consumers. See
 [Dependabot cooldown behavior](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
 Dependabot security updates are not held by its routine-update cooldown; npm's
 filter may still need a narrow exception for a fresh security fix.
+The pre-install check verifies the four effective npm settings in addition to
+the repository file. Unsafe inherited environment and duplicate-key overrides fail
+without printing their values. Synthetic configuration fixtures cover these cases.
+npm omits release-age CLI flags from script environments; CI therefore enforces
+`--min-release-age=7` directly on project installation commands.
 
 1. Verify updates on the publisher's primary source. Review package identity,
    maintainer changes, transitive lockfile diff, integrity and install scripts.

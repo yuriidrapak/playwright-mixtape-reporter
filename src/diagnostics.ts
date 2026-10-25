@@ -17,12 +17,103 @@ import type {
 } from '@playwright/test/reporter';
 import { duration, plainText } from './format.ts';
 import { OutputSanitizer } from './output-sanitizer.ts';
+import type { MixtapeReporterOptions } from './options.ts';
 
 export interface IssueLog {
     path: string;
     traces: number;
     failed: number;
     flaky: number;
+    truncated?: boolean;
+}
+
+const limitReached = Symbol('diagnostic byte limit');
+const truncationNotice =
+    '\n[Diagnostics truncated at configured byte limit.]\n';
+const redactionLineLimit = 64 * 1024;
+
+/** Stream lines through the optional redactor without retaining whole attempt output. */
+class DiagnosticWriter {
+    private bytes = 0;
+    private pending = '';
+    private pendingBytes = 0;
+    private oversized = false;
+    private readonly descriptor: number;
+    private readonly capacity: number;
+    private readonly redact: ((text: string) => string) | undefined;
+
+    constructor(
+        descriptor: number,
+        maximum: number,
+        redact?: (text: string) => string,
+    ) {
+        this.descriptor = descriptor;
+        this.capacity = maximum - Buffer.byteLength(truncationNotice);
+        this.redact = redact;
+    }
+
+    write(value: string): void {
+        if (!this.redact) {
+            this.raw(value);
+            return;
+        }
+        let offset = 0;
+        while (offset < value.length) {
+            const newline = value.indexOf('\n', offset);
+            const end = newline < 0 ? value.length : newline;
+            if (!this.oversized) {
+                const fragment = value.slice(offset, end);
+                this.pendingBytes += Buffer.byteLength(fragment);
+                if (this.pendingBytes > redactionLineLimit) {
+                    this.pending = '';
+                    this.oversized = true;
+                } else this.pending += fragment;
+            }
+            if (newline < 0) break;
+            this.finishLine();
+            offset = newline + 1;
+        }
+    }
+
+    private finishLine(): void {
+        let value =
+            '[Diagnostic line omitted: exceeds redaction buffer limit.]';
+        if (!this.oversized) {
+            try {
+                const redacted: unknown = this.redact!(this.pending);
+                if (typeof redacted !== 'string') {
+                    if (redacted instanceof Promise)
+                        void redacted.catch(() => {});
+                    throw new TypeError();
+                }
+                value = plainText(redacted);
+            } catch {
+                // Callback errors may themselves contain the original secret.
+                value = '[Diagnostic redaction failed; line omitted.]';
+            }
+        }
+        this.pending = '';
+        this.pendingBytes = 0;
+        this.oversized = false;
+        this.raw(value + '\n');
+    }
+
+    private raw(value: string): void {
+        const remaining = this.capacity - this.bytes;
+        if (Buffer.byteLength(value) <= remaining) {
+            writeFileSync(this.descriptor, value, 'utf8');
+            this.bytes += Buffer.byteLength(value);
+            return;
+        }
+        const buffer = Buffer.from(value.slice(0, remaining));
+        let end = Math.min(remaining, buffer.length);
+        // Stop before an incomplete UTF-8 character.
+        while (end > 0 && end < buffer.length && (buffer[end]! & 0xc0) === 0x80)
+            end--;
+        writeFileSync(this.descriptor, buffer.subarray(0, end));
+        writeFileSync(this.descriptor, truncationNotice);
+        throw limitReached;
+    }
 }
 
 function isFile(path: string): boolean {
@@ -45,6 +136,12 @@ export function writeIssueLog(
     tests: readonly TestCase[],
     result: FullResult,
     globalErrors: readonly TestError[],
+    options: Pick<
+        MixtapeReporterOptions,
+        | 'includeOutputInDiagnostics'
+        | 'redactDiagnosticText'
+        | 'maxDiagnosticBytes'
+    > = {},
 ): IssueLog {
     const selected = tests.filter((test) => {
         const last = test.results.at(-1);
@@ -62,9 +159,15 @@ export function writeIssueLog(
     mkdirSync(dirname(path), { recursive: true });
     const temporary = `${path}.${randomUUID()}.tmp`;
     const descriptor = openSync(temporary, 'wx', 0o600);
+    const writer = new DiagnosticWriter(
+        descriptor,
+        options.maxDiagnosticBytes ?? 10 * 1024 * 1024,
+        options.redactDiagnosticText,
+    );
+    let truncated = false;
     const lines = {
         push: (...values: string[]): void => {
-            writeFileSync(descriptor, values.join('\n') + '\n', 'utf8');
+            for (const value of values) writer.write(value + '\n');
         },
     };
     try {
@@ -109,16 +212,14 @@ export function writeIssueLog(
                     );
                 }
                 for (const channel of ['stdout', 'stderr'] as const) {
+                    if (options.includeOutputInDiagnostics === false) continue;
                     const chunks = attempt[channel] ?? [];
                     if (chunks.length) {
                         lines.push(`  ${channel}:`);
                         const filter = new OutputSanitizer();
                         for (const chunk of chunks)
-                            writeFileSync(
-                                descriptor,
-                                filter.write(chunk),
-                                'utf8',
-                            );
+                            writer.write(filter.write(chunk));
+                        writer.write(filter.end());
                         lines.push('');
                     }
                 }
@@ -195,9 +296,12 @@ export function writeIssueLog(
         }
         lines.push(`Available traces: ${traces.size}`, '');
     } catch (error) {
-        closeSync(descriptor);
-        rmSync(temporary, { force: true });
-        throw error;
+        if (error === limitReached) truncated = true;
+        else {
+            closeSync(descriptor);
+            rmSync(temporary, { force: true });
+            throw error;
+        }
     }
     closeSync(descriptor);
     try {
@@ -205,5 +309,5 @@ export function writeIssueLog(
     } finally {
         rmSync(temporary, { force: true });
     }
-    return { path, traces: traces.size, failed, flaky };
+    return { path, traces: traces.size, failed, flaky, truncated };
 }

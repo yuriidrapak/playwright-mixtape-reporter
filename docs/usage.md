@@ -30,21 +30,24 @@ export default defineConfig({
 });
 ```
 
-| Option                | Type                        | Default                                      | Behavior                                                                                            |
-| --------------------- | --------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `title`               | `string`                    | `'Playwright Mixtape Reporter'`              | Heading above the run.                                                                              |
-| `theme`               | `'cassette' \| 'compact'`   | `'cassette'`                                 | Retro ANSI colors and compact live worker deck, or the original static layout.                      |
-| `colorMode`           | `'auto' \| 'color' \| 'bw'` | `'auto'`                                     | Detect ANSI color, force it on, or produce plain B&W output.                                        |
-| `animations`          | `boolean`                   | `true`                                       | Request the live worker deck; terminal conditions below still apply.                                |
-| `interactive`         | `boolean`                   | `true`                                       | Arrow-key selection, Enter inspection, and display hold on an unclaimed input TTY.                  |
-| `showLogs`            | `boolean`                   | `false`                                      | Forward test stdout/stderr, including test `console.log` and `console.error`.                       |
-| `showMetrics`         | `boolean`                   | `false`                                      | Add CPU and network meters to the one-line live header; network requires the metrics fixture below. |
-| `symbols`             | `'emoji' \| 'ascii'`        | `'emoji'`                                    | Status markers; B&W always uses ASCII.                                                              |
-| `includeSuiteTitles`  | `boolean`                   | `false`                                      | Include enclosing `test.describe` titles before the test title.                                     |
-| `printFailureDetails` | `boolean`                   | `true`                                       | Print final unexpected failures with source locations and errors.                                   |
-| `colors`              | `boolean`                   | Unset                                        | Compatibility option that forces ANSI on/off when `colorMode` is `'auto'`.                          |
-| `printOutput`         | `boolean`                   | Unset                                        | Compatibility alias for `showLogs`.                                                                 |
-| `outputFile`          | `string \| false`           | `'test-results/mixtape-reporter/issues.log'` | Failed/flaky diagnostics log, relative to the config directory. Use `false` to disable.             |
+| Option                       | Type                        | Default                                      | Behavior                                                                                                                     |
+| ---------------------------- | --------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `title`                      | `string`                    | `'Playwright Mixtape Reporter'`              | Heading above the run.                                                                                                       |
+| `theme`                      | `'cassette' \| 'compact'`   | `'cassette'`                                 | Retro ANSI colors and compact live worker deck, or the original static layout.                                               |
+| `colorMode`                  | `'auto' \| 'color' \| 'bw'` | `'auto'`                                     | Detect ANSI color, force it on, or produce plain B&W output.                                                                 |
+| `animations`                 | `boolean`                   | `true`                                       | Request the live worker deck; terminal conditions below still apply.                                                         |
+| `interactive`                | `boolean`                   | `true`                                       | Arrow-key selection, Enter inspection, and display hold on an unclaimed input TTY.                                           |
+| `showLogs`                   | `boolean`                   | `false`                                      | Forward test stdout/stderr, including test `console.log` and `console.error`.                                                |
+| `showMetrics`                | `boolean`                   | `false`                                      | Add CPU and network meters to the one-line live header; network requires the metrics fixture below.                          |
+| `symbols`                    | `'emoji' \| 'ascii'`        | `'emoji'`                                    | Status markers; B&W always uses ASCII.                                                                                       |
+| `includeSuiteTitles`         | `boolean`                   | `false`                                      | Include enclosing `test.describe` titles before the test title.                                                              |
+| `printFailureDetails`        | `boolean`                   | `true`                                       | Print final unexpected failures with source locations and errors.                                                            |
+| `colors`                     | `boolean`                   | Unset                                        | Compatibility option that forces ANSI on/off when `colorMode` is `'auto'`.                                                   |
+| `printOutput`                | `boolean`                   | Unset                                        | Compatibility alias for `showLogs`.                                                                                          |
+| `outputFile`                 | `string \| false`           | `'test-results/mixtape-reporter/issues.log'` | Failed/flaky diagnostics log, relative to the config directory. Use `false` to disable.                                      |
+| `includeOutputInDiagnostics` | `boolean`                   | `true`                                       | Include captured stdout/stderr in the issue log; independent of terminal logging.                                            |
+| `redactDiagnosticText`       | `(text: string) => string`  | Unset                                        | Synchronously transform each plain-text issue-log line. Does not change terminal output, other reporters, or trace contents. |
+| `maxDiagnosticBytes`         | `number`                    | `10485760` (10 MiB)                          | Maximum UTF-8 issue-log bytes, including a truncation notice. Safe integer of at least 1024; excludes trace files.           |
 
 ### Environment variables
 
@@ -411,7 +414,11 @@ cases. The reporter preserves Playwright's run status and exit code, including
 `showLogs: false` hides test stdout/stderr from this terminal reporter.
 `showLogs: true` forwards those streams, including test console output. The
 setting does not remove output captured by other reporters. Forwarded logs preserve
-SGR colors only when reporter color is enabled. Terminal commands (including OSC
+Allowlisted SGR colors and basic styles only when reporter color is enabled.
+Concealment, blinking, inverse video, and unsupported styles are discarded. Each
+forwarded write resets terminal styling, restoring that stream's allowed styles
+on its next chunk so stdout, stderr, and reporter output remain independent.
+Terminal commands (including OSC
 clipboard/hyperlink sequences, screen clearing, cursor movement, and control
 strings) and bidirectional text controls are removed, even across chunks. Raw
 terminal animations from tests are intentionally not supported.
@@ -460,6 +467,35 @@ detailed log. A clean run replaces the file with a current-run header and
 `No failed or flaky tests.`; it does not leave a stale failure log behind.
 `showLogs` and `printFailureDetails` affect terminal output independently of this
 file. Set `outputFile: false` to disable file generation and its summary link.
+
+To omit captured stdout/stderr while retaining error messages and attachment
+references, set `includeOutputInDiagnostics: false`. To transform diagnostic text:
+
+```ts
+{
+  includeOutputInDiagnostics: false,
+  maxDiagnosticBytes: 2 * 1024 * 1024,
+  redactDiagnosticText: (line) =>
+    line.replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]'),
+}
+```
+
+This example matches one token format, not all secrets. The callback receives
+each complete sanitized line without its trailing newline, including errors,
+labels, paths, and captured output. Output chunks and UTF-8 boundaries are joined
+before redaction. Use a synchronous callback; if it throws or returns a non-string,
+the line is replaced with an omission notice and the exception text is discarded.
+With redaction enabled, lines exceeding a 64 KiB UTF-8 buffer are omitted entirely.
+Matching across separate lines is the callback author's responsibility (for
+example, using a stateful callback for a multi-line credential).
+
+The default issue-log cap is 10 MiB. Reaching the configured cap stops log
+generation, adds a notice to the file and summary, and leaves Playwright's result
+unchanged. Trace extraction stops with log generation; previously written traces
+remain. Neither the byte cap nor the callback changes trace contents, existing
+attachments, terminal output, or another reporter's data. Redacting paths may
+make the log's links and commands unusable. Existing artifacts need their own
+access and retention policy.
 
 Logs can contain credentials, personal data, and internal paths printed by your
 tests. The reporter does not redact secrets automatically. Review logs and traces
