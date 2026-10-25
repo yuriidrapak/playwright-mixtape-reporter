@@ -4,10 +4,15 @@ run-name: Publish npm ${{ inputs.version }} from ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
+      # BEGIN version from package.json (npm run release:sync)
       version:
-        description: Version already merged to main (for example 1.0.2)
+        description: Ready-to-publish version from package.json
         required: true
-        type: string
+        type: choice
+        default: '1.0.3'
+        options:
+          - '1.0.3'
+      # END version from package.json
 
 permissions:
   contents: read

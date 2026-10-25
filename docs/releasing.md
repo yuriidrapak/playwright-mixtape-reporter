@@ -5,8 +5,9 @@ Build and test the exact tarball before publication. Building/packing does not
 publish anything. Never commit registry tokens or give them to build tools.
 
 Publication is manual: **Actions → Publish npm package → Run workflow**. Select
-`main`, enter the version already committed in `package.json` (for example
-`1.0.2`), and click **Run workflow**. GitHub controls the button's label. Merging
+`main`, select the version from the dropdown, and click **Run workflow**. The
+choice comes from the version committed in `package.json`; proposed future
+versions are not offered. GitHub controls the button's label. Merging
 a PR, pushing a tag, or publishing a GitHub Release does not start npm publication.
 The form does not bump versions or open PRs.
 
@@ -150,6 +151,14 @@ GitHub only displays **Run workflow** when `workflow_dispatch` is present on the
 default branch. The request job accepts only `main` runs initiated and rerun by
 the release maintainer, `yuriidrapak`.
 
+GitHub requires `choice` options in the workflow YAML; it cannot fetch
+`package.json` when opening the form. After changing the package version, run
+`npm run release:sync` to update the marked input block in `publish.yml`, and
+commit it with `package.json`, `package-lock.json` and the changelog. The dropdown
+contains that version as its only option and preselects it. `npm run check`
+includes `npm run release:check`, which fails if the dropdown is stale without
+rewriting files. These are explicit commands; install scripts remain blocked.
+
 To let the button create a protected `vX.Y.Z` tag, add an Actions repository secret
 named `RELEASE_GITHUB_TOKEN`: a fine-grained GitHub token owned by `yuriidrapak`,
 limited to this repository, with **Contents: read and write** and an expiration.
@@ -180,10 +189,12 @@ and [creating Git references](https://docs.github.com/en/rest/git/refs#create-a-
 ## Subsequent stable releases
 
 1. Update with `npm version patch --no-git-tag-version` (or minor/major), update
-   the changelog, and merge the reviewed change to protected `main`.
+   the changelog, then run `npm run release:sync` and `npm run check`. Commit the
+   package files, changelog and updated `publish.yml` together, and merge the
+   reviewed change to protected `main`.
 2. Confirm CI passed and review npm's public account contact email. Open
-   **Actions → Publish npm package → Run workflow**, select `main`, enter
-   `X.Y.Z` without a `v` prefix, and click **Run workflow**. The version must match
+   **Actions → Publish npm package → Run workflow**, select `main`, choose the
+   preselected `X.Y.Z` version, and click **Run workflow**. The version must match
    both package files on that commit. The request creates or verifies `vX.Y.Z`
    and dispatches publication on the tag; it does not modify source or create a
    GitHub Release. You may add a GitHub Release with notes separately.

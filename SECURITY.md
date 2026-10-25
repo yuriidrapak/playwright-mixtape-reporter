@@ -69,7 +69,9 @@ maps are not intrinsically unsafe in open source; this is an artifact-minimizati
 policy. `npm run test:package -- <tarball>` checks the exact artifact consumers get.
 
 Publication requires a manual Actions request for a version already committed
-on `main`. The request verifies or creates an immutable tag and dispatches the
+on `main`. The version dropdown is generated from `package.json` and checked for
+drift in CI; publication still independently validates the selected version.
+The request verifies or creates an immutable tag and dispatches the
 tag run. Its optional maintainer GitHub token is limited to tag creation in a job
 without dependency installation; it is not passed to tests, builds or npm. The
 workflow does not publish on PR merges or GitHub Release events.

@@ -183,5 +183,5 @@ Contributions are welcome under the [MIT license](LICENSE). Start with
 and the [development guide](https://github.com/yuriidrapak/playwright-mixtape-reporter/blob/main/docs/development.md).
 Maintainers can follow the [npm release guide](https://github.com/yuriidrapak/playwright-mixtape-reporter/blob/main/docs/releasing.md).
 Publication starts manually from **Actions → Publish npm package → Run workflow**
-with the version already committed on `main`.
+by selecting the prepared version from the dropdown, sourced from `package.json`.
 The initial release is tracked in [CHANGELOG.md](CHANGELOG.md).
