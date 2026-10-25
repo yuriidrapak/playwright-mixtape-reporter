@@ -57,7 +57,7 @@ npx --no-install playwright install chromium
 npm run test:browser
 npm audit --audit-level=high
 npm run pack
-npm run test:package -- ./playwright-mixtape-reporter-1.0.1.tgz
+npm run test:package -- ./playwright-mixtape-reporter-1.0.3.tgz
 ```
 
 Use the current version in the filename. `npm run pack` cleans/builds, inspects

@@ -111,7 +111,7 @@ npm run test:browser    # real local HTTP + Chromium + retained traces + metrics
 npm run bench           # synthetic render/diff timings, no browser or credentials
 npm audit --audit-level=high
 npm run pack
-npm run test:package -- ./playwright-mixtape-reporter-1.0.1.tgz
+npm run test:package -- ./playwright-mixtape-reporter-1.0.3.tgz
 ```
 
 `npm test` and `npm run typecheck` build first, so package self-references work in
