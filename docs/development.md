@@ -120,6 +120,9 @@ expected failures, interruptions, sharding, blob merges, diagnostic errors,
 streamed control-sequence filtering, file permissions, metrics teardown, and
 malicious/malformed archive and dependency-policy fixtures. Secret fixtures are
 synthetic; do not read real credentials to exercise the scanner.
+Manual-publication regressions use synthetic GitHub responses to verify version
+and actor checks, immutable tags, credential separation, dispatch and failures.
+They never create real tags, dispatch workflows or publish packages.
 The ten-worker pseudo-terminal test requires the POSIX `script` utility and is
 skipped on Windows. HTTP tests bind only to loopback. Sandboxed environments may
 need to allow local server binding and pseudo-terminals.

@@ -1,0 +1,247 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { validateRelease } from '../scripts/check-release.mjs';
+import { requestPublication } from '../scripts/request-publication.mjs';
+
+function fixture() {
+    return {
+        metadata: { name: 'playwright-mixtape-reporter', version: '1.0.2' },
+        lock: { version: '1.0.2', packages: { '': { version: '1.0.2' } } },
+        event: {
+            repository: {
+                full_name: 'yuriidrapak/playwright-mixtape-reporter',
+                private: false,
+            },
+            inputs: { version: '1.0.2' },
+        },
+        env: {
+            GITHUB_EVENT_NAME: 'workflow_dispatch',
+            GITHUB_REPOSITORY: 'yuriidrapak/playwright-mixtape-reporter',
+            GITHUB_REF: 'refs/heads/main',
+            GITHUB_SHA: 'a'.repeat(40),
+            GITHUB_ACTOR: 'yuriidrapak',
+            GITHUB_TRIGGERING_ACTOR: 'yuriidrapak',
+            GH_TOKEN: 'synthetic-workflow-credential',
+            RELEASE_GITHUB_TOKEN: 'synthetic-tag-credential',
+        },
+    };
+}
+
+function fakeGitHub(responses) {
+    const calls = [];
+    const fetcher = async (url, options) => {
+        calls.push({
+            url,
+            ...options,
+            body: options.body ? JSON.parse(options.body) : undefined,
+        });
+        assert.ok(responses.length, 'Unexpected API request');
+        const [status, body] = responses.shift();
+        return new Response(
+            status === 204 ? null : JSON.stringify(body ?? {}),
+            { status },
+        );
+    };
+    return { calls, fetcher };
+}
+
+test('manual publication requires the exact stable version, public repository and immutable tag', () => {
+    const { metadata, event, env } = fixture();
+    env.GITHUB_REF = 'refs/tags/v1.0.2';
+    assert.equal(validateRelease(metadata, event, env), 'v1.0.2');
+    for (const version of [
+        '1.0.3',
+        'v1.0.2',
+        '1.0.2-beta.1',
+        '01.0.2',
+        '1.0.2\n',
+        '$(echo unsafe)',
+        '',
+    ]) {
+        assert.throws(() =>
+            validateRelease(metadata, { ...event, inputs: { version } }, env),
+        );
+    }
+    assert.throws(
+        () =>
+            validateRelease(metadata, event, {
+                ...env,
+                GITHUB_EVENT_NAME: 'release',
+            }),
+        /manually/,
+    );
+    for (const ref of [
+        'refs/heads/main',
+        'refs/heads/feature',
+        'refs/tags/v1.0.3',
+    ]) {
+        assert.throws(
+            () => validateRelease(metadata, event, { ...env, GITHUB_REF: ref }),
+            /immutable release tag/,
+        );
+    }
+    assert.throws(
+        () =>
+            validateRelease(
+                metadata,
+                {
+                    ...event,
+                    repository: { ...event.repository, private: true },
+                },
+                env,
+            ),
+        /public/,
+    );
+    assert.throws(() =>
+        validateRelease(
+            metadata,
+            {
+                ...event,
+                repository: { ...event.repository, full_name: 'other/repo' },
+            },
+            env,
+        ),
+    );
+});
+
+test('main request rejects unmerged versions and unauthorized reruns before any API call', async () => {
+    for (const change of [
+        (input) => {
+            input.metadata.version = '1.0.1';
+        },
+        (input) => {
+            input.lock.packages[''].version = '1.0.1';
+        },
+        (input) => {
+            input.env.GITHUB_REF = 'refs/heads/feature';
+        },
+        (input) => {
+            input.env.GITHUB_ACTOR = 'another-user';
+        },
+        (input) => {
+            input.env.GITHUB_TRIGGERING_ACTOR = 'another-user';
+        },
+        (input) => {
+            input.env.GITHUB_SHA = 'main';
+        },
+    ]) {
+        const input = fixture();
+        change(input);
+        const mock = fakeGitHub([]);
+        await assert.rejects(
+            requestPublication({ ...input, fetcher: mock.fetcher }),
+        );
+        assert.equal(mock.calls.length, 0);
+    }
+});
+
+test('creates a tag at the requested main commit and dispatches the same version on that tag', async () => {
+    const input = fixture();
+    const mock = fakeGitHub([[404], [201, {}], [204]]);
+    assert.equal(
+        await requestPublication({ ...input, fetcher: mock.fetcher }),
+        'v1.0.2',
+    );
+    assert.deepEqual(
+        mock.calls.map((call) => call.method),
+        ['GET', 'POST', 'POST'],
+    );
+    assert.deepEqual(mock.calls[1].body, {
+        ref: 'refs/tags/v1.0.2',
+        sha: input.env.GITHUB_SHA,
+    });
+    assert.equal(
+        mock.calls[1].headers.Authorization,
+        `Bearer ${input.env.RELEASE_GITHUB_TOKEN}`,
+    );
+    assert.equal(
+        mock.calls[2].url,
+        'https://api.github.com/repos/yuriidrapak/playwright-mixtape-reporter/actions/workflows/publish.yml/dispatches',
+    );
+    assert.deepEqual(mock.calls[2].body, {
+        ref: 'v1.0.2',
+        inputs: { version: '1.0.2' },
+    });
+    assert.equal(
+        mock.calls[2].headers.Authorization,
+        `Bearer ${input.env.GH_TOKEN}`,
+    );
+    assert.ok(mock.calls.every((call) => call.redirect === 'error'));
+});
+
+test('retries reuse the exact existing tag without tag credentials or mutation', async () => {
+    for (const annotated of [false, true]) {
+        const input = fixture();
+        delete input.env.RELEASE_GITHUB_TOKEN;
+        const target = { type: 'commit', sha: input.env.GITHUB_SHA };
+        const responses = annotated
+            ? [
+                  [200, { object: { type: 'tag', sha: 'b'.repeat(40) } }],
+                  [200, { object: target }],
+                  [204],
+              ]
+            : [[200, { object: target }], [204]];
+        const mock = fakeGitHub(responses);
+        await requestPublication({ ...input, fetcher: mock.fetcher });
+        assert.equal(
+            mock.calls.filter((call) => call.method !== 'GET').length,
+            1,
+        );
+        assert.match(mock.calls.at(-1).url, /\/dispatches$/);
+    }
+});
+
+test('conflicting tags, missing credentials and API failures never dispatch or move a tag', async () => {
+    const scenarios = [
+        {
+            responses: [
+                [200, { object: { type: 'commit', sha: 'b'.repeat(40) } }],
+            ],
+            error: /different commit/,
+        },
+        { responses: [[404]], noToken: true, error: /RELEASE_GITHUB_TOKEN/ },
+        {
+            responses: [[403, { message: 'synthetic-private-response' }]],
+            error: /HTTP 403/,
+        },
+        {
+            responses: [
+                [404],
+                [403, { message: 'synthetic-private-response' }],
+            ],
+            error: /HTTP 403/,
+        },
+    ];
+    for (const scenario of scenarios) {
+        const input = fixture();
+        if (scenario.noToken) delete input.env.RELEASE_GITHUB_TOKEN;
+        const mock = fakeGitHub(scenario.responses);
+        await assert.rejects(
+            requestPublication({ ...input, fetcher: mock.fetcher }),
+            (error) => {
+                assert.match(error.message, scenario.error);
+                assert.doesNotMatch(error.message, /synthetic-/);
+                return true;
+            },
+        );
+        assert.ok(
+            mock.calls.every(
+                (call) =>
+                    !call.url.endsWith('/dispatches') &&
+                    !['PATCH', 'DELETE'].includes(call.method),
+            ),
+        );
+    }
+});
+
+test('a failed dispatch is reported instead of claiming publication succeeded', async () => {
+    const input = fixture();
+    const mock = fakeGitHub([
+        [200, { object: { type: 'commit', sha: input.env.GITHUB_SHA } }],
+        [422],
+    ]);
+    await assert.rejects(
+        requestPublication({ ...input, fetcher: mock.fetcher }),
+        /HTTP 422/,
+    );
+});

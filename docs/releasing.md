@@ -4,6 +4,12 @@ The package name is `playwright-mixtape-reporter`; the first npm release is `1.0
 Build and test the exact tarball before publication. Building/packing does not
 publish anything. Never commit registry tokens or give them to build tools.
 
+Publication is manual: **Actions → Publish npm package → Run workflow**. Select
+`main`, enter the version already committed in `package.json` (for example
+`1.0.2`), and click **Run workflow**. GitHub controls the button's label. Merging
+a PR, pushing a tag, or publishing a GitHub Release does not start npm publication.
+The form does not bump versions or open PRs.
+
 ## Prepare the public project
 
 - Review source and Git history for private data, then make the repository public.
@@ -17,7 +23,7 @@ publish anything. Never commit registry tokens or give them to build tools.
   restricts updates/deletions with **no bypass actors**. Do not add the maintainer
   to the immutable-tag rule. A tag's workflow can be changed on its commit, so a
   main-ancestry check inside that workflow is not an independent authorization
-  boundary. This separation keeps automatic publishing after tests while
+  boundary. This separation keeps manually requested publication gated on tests while
   preventing other repository writers from creating release tags. Review the
   creation allowlist deliberately when adding a release maintainer or automation.
 - Use GitHub's no-reply email for public commits. Do not merge private prototype
@@ -30,7 +36,7 @@ publish anything. Never commit registry tokens or give them to build tools.
   See [npm's metadata privacy guidance](https://docs.npmjs.com/threats-and-mitigations/).
 - Enable private vulnerability reporting, Dependabot alerts and available secret
   scanning/push protection. Create the `npm` deployment environment restricted to
-  release tags where supported. For automatic publication after tests, leave the
+  release tags where supported. To finish a manual request after tests, leave the
   manual reviewer gate off; add reviewers if you want a separate human approval.
 - Protect GitHub/npm accounts with 2FA, preferably a security key/passkey. Keep MIT
   license/repository metadata aligned. Date the changelog when releasing; use a new
@@ -90,9 +96,9 @@ GitHub provenance without putting an npm token in CI.
    the bootstrap stage.** This is a registry change, not a dry run.
 
 4. Configure the trusted publisher below, with direct publishing allowed.
-5. Create the real `v1.0.1` GitHub release at the reviewed commit on `main`.
-   The workflow validates every platform, builds and tests the release tarball,
-   and publishes `1.0.1` with provenance.
+5. Run **Publish npm package** on `main` with version `1.0.1`, following the
+   manual publication steps below. The workflow validates every platform, builds
+   and tests the release tarball, and publishes `1.0.1` with provenance.
 6. Verify the registry artifact and provenance, then remove the unused bootstrap
    stage with `npm stage reject <stage-id>` and complete npm's 2FA prompt. Reject
    only the temporary stage; do not unpublish a released version.
@@ -137,13 +143,51 @@ approval; otherwise direct publishing fails. After validating OIDC, select
 revoke unneeded publishing tokens. No `NPM_TOKEN` secret is needed.
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
 
+## Configure the manual Actions form
+
+Merge `publish.yml` and its release scripts into `main` before using the form.
+GitHub only displays **Run workflow** when `workflow_dispatch` is present on the
+default branch. The request job accepts only `main` runs initiated and rerun by
+the release maintainer, `yuriidrapak`.
+
+To let the button create a protected `vX.Y.Z` tag, add an Actions repository secret
+named `RELEASE_GITHUB_TOKEN`: a fine-grained GitHub token owned by `yuriidrapak`,
+limited to this repository, with **Contents: read and write** and an expiration.
+The existing tag-creation allowlist must permit that maintainer. Keep the
+update/deletion ruleset immutable with no bypass actors. This is a GitHub tag
+credential; npm still uses OIDC and needs no npm token. The token is provided only
+to the request step, which installs no dependencies and executes no package code.
+Protect workflow/script changes and rotate or revoke this token when needed.
+
+Alternatively, create the tag yourself at the reviewed `main` commit before
+clicking the button; an existing matching tag requires no extra secret. An
+existing tag pointing to any other commit is rejected and never moved. If GitHub
+rejects tag creation, check the token's repository access and tag rules rather
+than relaxing the immutable-tag rules.
+
+The request uses the built-in `GITHUB_TOKEN` with `actions: write` to dispatch the
+same workflow on the tag. This produces two runs: a short request run on `main`
+and the actual publication run on `vX.Y.Z`. A successful request only means the
+publication run was queued. Follow the tag run through its final publish job.
+This keeps the `npm` environment restricted to `v*` tags and ensures reusable CI,
+the build, and npm provenance all use the same release commit. No repository
+settings are changed by the workflow.
+
+References: [manual workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow),
+[workflow dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event),
+and [creating Git references](https://docs.github.com/en/rest/git/refs#create-a-reference).
+
 ## Subsequent stable releases
 
 1. Update with `npm version patch --no-git-tag-version` (or minor/major), update
    the changelog, and merge the reviewed change to protected `main`.
-2. Confirm CI passed. Tag that commit `vX.Y.Z` and publish a non-draft,
-   non-prerelease GitHub release for it.
-3. The release invokes the reusable CI workflow for the exact release commit:
+2. Confirm CI passed and review npm's public account contact email. Open
+   **Actions → Publish npm package → Run workflow**, select `main`, enter
+   `X.Y.Z` without a `v` prefix, and click **Run workflow**. The version must match
+   both package files on that commit. The request creates or verifies `vX.Y.Z`
+   and dispatches publication on the tag; it does not modify source or create a
+   GitHub Release. You may add a GitHub Release with notes separately.
+3. The tag run invokes the reusable CI workflow for the exact release commit:
    all Node/platform checks, dependency audits and Chromium must succeed. Only
    then does the build job verify public source, version and main ancestry,
    install without scripts, pack and test the exact tarball, check registry state,
@@ -157,6 +201,12 @@ revoke unneeded publishing tokens. No `NPM_TOKEN` secret is needed.
    dependency cache is restored. Actions are pinned to full commit SHAs.
 5. Verify npm version, provenance link and downloaded tarball integrity. Test
    installation in a separate consumer environment without publishing credentials.
+
+For a failed publication, investigate the failed gate and rerun the **tag run**.
+If the request failed after creating the tag, rerunning that request reuses the
+same tag only when its commit matches. Do not rerun from a newer `main` commit
+with the old version. The existing registry check skips an already published,
+identical tarball and rejects different contents for that version.
 
 The digest protects transfer between jobs, not the build host. Review workflows,
 dependencies and account permissions. Only stable releases are supported. Never
