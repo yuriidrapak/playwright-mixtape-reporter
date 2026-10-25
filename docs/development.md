@@ -30,6 +30,11 @@ and inherited configuration, not a hidden flag on the parent command. CI uses
 `npm ci --ignore-scripts --min-release-age=7` explicitly. A successful check
 cannot prevent someone overriding policy in a separate later install command.
 
+After a package version bump, run `npm run release:sync` to regenerate the
+publish form's dropdown from `package.json`. Commit the updated workflow with
+both package files. `npm run check` includes a read-only `release:check` to catch
+a stale dropdown before merging; see [releasing](releasing.md).
+
 ## Source layout
 
 Paths below are relative to this repository root.

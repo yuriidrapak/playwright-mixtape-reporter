@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Generate the manual publish dropdown from `package.json`, preselect the
+  prepared version, and reject stale workflow options during CI.
+
 ## 1.0.3 — 2026-10-25
 
 - Add a manual Actions publish form for a version already merged to `main`, with

@@ -1,7 +1,109 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { validateRelease } from '../scripts/check-release.mjs';
 import { requestPublication } from '../scripts/request-publication.mjs';
+import {
+    syncReleaseChoice,
+    updateReleaseChoice,
+} from '../scripts/sync-release-version.mjs';
+
+const dropdownFixture = `name: Publication fixture
+on:
+  workflow_dispatch:
+    inputs:
+      # BEGIN version from package.json (npm run release:sync)
+      version:
+        type: string
+        default: '0.0.1'
+      # END version from package.json
+permissions:
+  contents: read
+jobs:
+  publish:
+    environment: npm
+`;
+
+test('generates only the committed version choice and preserves the surrounding workflow', () => {
+    for (const eol of ['\n', '\r\n']) {
+        const workflow = dropdownFixture.replaceAll('\n', eol);
+        const updated = updateReleaseChoice(workflow, '2.4.6');
+        assert.ok(
+            updated.startsWith(
+                workflow.slice(0, workflow.indexOf('      # BEGIN')),
+            ),
+        );
+        assert.ok(
+            updated.endsWith(workflow.slice(workflow.indexOf('      # END'))),
+        );
+        assert.ok(
+            updated.includes(
+                `        type: choice${eol}        default: '2.4.6'${eol}        options:${eol}          - '2.4.6'${eol}`,
+            ),
+        );
+        assert.doesNotMatch(updated, /0\.0\.1/);
+        assert.equal(updateReleaseChoice(updated, '2.4.6'), updated);
+    }
+});
+
+test('refuses malformed version sources and ambiguous generated sections', () => {
+    for (const version of [
+        undefined,
+        1,
+        '',
+        '1.2',
+        'v1.2.3',
+        '1.2.3-beta',
+        '01.2.3',
+        '1.2.3\n',
+        "1.2.3'\npermissions: write-all",
+    ]) {
+        assert.throws(() => updateReleaseChoice(dropdownFixture, version));
+    }
+    for (const workflow of [
+        dropdownFixture.replace('      # BEGIN', '      # missing BEGIN'),
+        dropdownFixture.replace('      # END', '      # missing END'),
+        dropdownFixture + dropdownFixture,
+        dropdownFixture.split('\n').reverse().join('\n'),
+    ]) {
+        assert.throws(() => updateReleaseChoice(workflow, '1.2.3'), /marker/);
+    }
+});
+
+test('checks the package version without writing and syncs after a version bump', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'mixtape-release-choice-'));
+    const workflowPath = join(directory, '.github/workflows/publish.yml');
+    const metadataPath = join(directory, 'package.json');
+    try {
+        await mkdir(join(directory, '.github/workflows'), { recursive: true });
+        await writeFile(metadataPath, JSON.stringify({ version: '1.0.3' }));
+        await writeFile(workflowPath, dropdownFixture);
+        await assert.rejects(
+            syncReleaseChoice(directory, { check: true }),
+            /npm run release:sync/,
+        );
+        assert.equal(await readFile(workflowPath, 'utf8'), dropdownFixture);
+        assert.equal(await syncReleaseChoice(directory), '1.0.3');
+        assert.equal(
+            await syncReleaseChoice(directory, { check: true }),
+            '1.0.3',
+        );
+        await writeFile(metadataPath, JSON.stringify({ version: '1.1.0' }));
+        await assert.rejects(
+            syncReleaseChoice(directory, { check: true }),
+            /stale/,
+        );
+        await syncReleaseChoice(directory);
+        const updated = await readFile(workflowPath, 'utf8');
+        assert.match(updated, /default: '1\.1\.0'/);
+        assert.doesNotMatch(updated, /1\.0\.3/);
+        await syncReleaseChoice(directory, { check: true });
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
 
 function fixture() {
     return {
