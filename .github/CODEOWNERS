@@ -1,0 +1,8 @@
+# Branch protection must require code-owner review for this to be enforced.
+/.github/ @yuriidrapak
+/AGENTS.md @yuriidrapak
+/SECURITY.md @yuriidrapak
+/.npmrc @yuriidrapak
+/package*.json @yuriidrapak
+/scripts/ @yuriidrapak
+/tsconfig*.json @yuriidrapak

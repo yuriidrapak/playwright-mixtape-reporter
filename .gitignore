@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.smoke-*/
+*.tgz
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store

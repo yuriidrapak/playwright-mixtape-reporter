@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible problem with the reporter.
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and expected behavior
+      description: Include a minimal config and test. Remove credentials, private URLs, and customer data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Reporter, Playwright and Node versions; OS; terminal; CI or local; relevant reporter options.
+    validations:
+      required: true
