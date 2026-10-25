@@ -1,15 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.0.4 — 2026-10-25
 
 - Check the committed package version against all stable versions on npm before
   creating a release tag, and recheck before upload while preserving identical
   artifact retries.
-- Generate the manual publish dropdown from `package.json`, preselect the
-  prepared version, and reject stale workflow options during CI.
 
 ## 1.0.3 — 2026-10-25
 
+- Generate the manual publish dropdown from `package.json`, preselect the
+  prepared version, and reject stale workflow options during CI.
 - Add a manual Actions publish form for a version already merged to `main`, with
   protected tag creation and the existing full CI and exact-tarball checks.
 - Validate effective npm policy settings, rejecting unsafe overrides without
