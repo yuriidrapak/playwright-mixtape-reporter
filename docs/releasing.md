@@ -15,6 +15,11 @@ publish anything. Never commit registry tokens or give them to build tools.
 - Use GitHub's no-reply email for public commits. Do not merge private prototype
   history into the public repository. Squashing a branch does not remove GitHub
   pull-request references or cached commits.
+- Before staging or publishing, review the npm account's public contact email.
+  npm adds that email to package metadata independently of GitHub's no-reply
+  setting. Use a working, verified public contact alias if desired. Updating the
+  account email does not remove the old address from existing version metadata.
+  See [npm's metadata privacy guidance](https://docs.npmjs.com/threats-and-mitigations/).
 - Enable private vulnerability reporting, Dependabot alerts and available secret
   scanning/push protection. Create the `npm` deployment environment restricted to
   release tags where supported. For automatic publication after tests, leave the

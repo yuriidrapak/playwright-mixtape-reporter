@@ -110,6 +110,11 @@ npm trusted publishing is bound to this repository, `publish.yml`, and environme
 bypass. No npm publishing token is stored in GitHub Actions. The temporary
 unpublished bootstrap stage was rejected after publication; it was never approved.
 
+GitHub's no-reply commits do not hide npm's public maintainer contact email. npm
+includes the account email in version metadata, including this release. Future
+publications can use a verified public contact alias; changing it does not erase
+contact metadata from existing versions. See [release preparation](releasing.md).
+
 ## Operational limits
 
 Logs and traces may contain secrets from tests; automatic redaction is not

@@ -79,6 +79,10 @@ dependency behavior. User instructions define the authorized scope.
 - Keep public commits on the clean public history and use the maintainer's
   GitHub no-reply email. Never merge or mirror private prototype history into the
   public repository; old pull-request references can retain personal metadata.
+- Before staging or publishing, review npm's account contact email separately.
+  npm publishes it in package metadata; GitHub no-reply settings do not hide it,
+  and later account-email changes do not erase existing version metadata. Use a
+  verified public alias when requested; never invent a nonfunctional address.
 
 ## Runtime security and correctness
 
