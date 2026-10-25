@@ -71,6 +71,11 @@ policy. `npm run test:package -- <tarball>` checks the exact artifact consumers 
 Publication requires a manual Actions request for a version already committed
 on `main`. The version dropdown is generated from `package.json` and checked for
 drift in CI; publication still independently validates the selected version.
+Before any tag creation or dispatch, the request queries public npm metadata
+without credentials and requires a version higher than every published stable
+version. Failed or malformed registry lookups stop the request. The build checks
+version ordering again before uploading a new version; identical published
+artifacts remain safe to retry without another upload.
 The request verifies or creates an immutable tag and dispatches the
 tag run. Its optional maintainer GitHub token is limited to tag creation in a job
 without dependency installation; it is not passed to tests, builds or npm. The

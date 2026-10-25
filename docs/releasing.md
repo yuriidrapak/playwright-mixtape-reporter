@@ -11,6 +11,16 @@ versions are not offered. GitHub controls the button's label. Merging
 a PR, pushing a tag, or publishing a GitHub Release does not start npm publication.
 The form does not bump versions or open PRs.
 
+After the one-time `RELEASE_GITHUB_TOKEN` setup below, the button handles npm
+version verification, protected-tag creation, CI, packaging, and publication.
+`package.json` is the source of truth, and the lockfile and selected option must
+match it. Before creating a tag or dispatching the tag run, the request fetches
+the package's public npm version inventory without credentials. The selected
+version must be higher than **every published stable version**, compared
+numerically rather than alphabetically; `latest` alone may point to an older
+release. Prereleases and the bootstrap stage do not count as stable versions.
+Equal/older versions and unavailable or malformed registry data stop the request.
+
 ## Prepare the public project
 
 - Review source and Git history for private data, then make the repository public.
@@ -204,6 +214,8 @@ and [creating Git references](https://docs.github.com/en/rest/git/refs#create-a-
    install without scripts, pack and test the exact tarball, check registry state,
    and upload only that tarball with its SHA-256. Validation/build have read-only
    repository permissions and no npm environment/OIDC rights.
+   For an unpublished version, the build rechecks npm's highest stable version
+   so a newer release completed during CI prevents an older upload.
 4. Publish job: use the protected `npm` environment, download the artifact, verify
    filename/tag and SHA-256, then publish the explicit local path
    `./release/<filename>` with
@@ -214,6 +226,8 @@ and [creating Git references](https://docs.github.com/en/rest/git/refs#create-a-
    installation in a separate consumer environment without publishing credentials.
 
 For a failed publication, investigate the failed gate and rerun the **tag run**.
+New requests on `main` require a version newer than npm; rerunning the tag run
+retains the existing identical-tarball check without creating or moving tags.
 If the request failed after creating the tag, rerunning that request reuses the
 same tag only when its commit matches. Do not rerun from a newer `main` commit
 with the old version. The existing registry check skips an already published,
